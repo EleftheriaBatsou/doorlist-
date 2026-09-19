@@ -1,0 +1,46 @@
+{
+  "name": "doorlist-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --include server/src server/src/index.ts",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && vue-tsc -p tsconfig.web.json --noEmit",
+    "start": "node dist/server/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/middie": "^9.3.4",
+    "@fastify/multipart": "^10.1.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/static": "^10.1.4",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@nats-io/jetstream": "^3.4.0",
+    "@nats-io/transport-node": "^3.4.0",
+    "fastify": "^5.12.5",
+    "idb-keyval": "^6.3.0",
+    "ioredis": "^6.0.0",
+    "pg": "^8.23.0",
+    "qr-scanner": "^1.4.2",
+    "vue": "^3.5.43",
+    "vue-router": "^5.3.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vue-tsc": "^3.3.11"
+  }
+}
