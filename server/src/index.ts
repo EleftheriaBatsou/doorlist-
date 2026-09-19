@@ -14,9 +14,11 @@ import { setupLive } from './live.js';
 import { demoExists, seedDemo } from './seed.js';
 
 const app = Fastify({
-  logger: { level: config.isProd ? 'info' : 'debug', transport: undefined },
+  logger: { level: 'info' },
   trustProxy: true, // behind the Zerops L7 balancer — real client IP for rate limits
   bodyLimit: 1024 * 1024,
+  forceCloseConnections: true, // fast restarts: don't wait on idle keep-alive / HMR sockets
+  disableRequestLogging: !config.isProd, // dev: Vite module requests would drown the log
 });
 
 await app.register(cookie, { secret: config.sessionSecret });
@@ -71,7 +73,7 @@ if (config.isProd) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: { server: app.server, clientPort: config.hmrClientPort },
+      ws: { server: app.server, clientPort: config.hmrClientPort },
     },
     appType: 'spa',
   });

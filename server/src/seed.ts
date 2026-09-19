@@ -72,10 +72,6 @@ function coverSvg(): string {
     <circle cx="560" cy="140" r="16" opacity=".6"/><circle cx="1040" cy="260" r="10" opacity=".7"/>
     <circle cx="1380" cy="170" r="22" opacity=".5"/><circle cx="160" cy="470" r="12" opacity=".6"/>
   </g>
-  <g fill="#FBFAFF" opacity=".95" font-family="Plus Jakarta Sans, Inter, system-ui, sans-serif" font-weight="800">
-    <text x="120" y="420" font-size="150" letter-spacing="-4">NEON</text>
-    <text x="120" y="560" font-size="150" letter-spacing="-4">NIGHTS</text>
-  </g>
 </svg>`;
 }
 
@@ -89,7 +85,7 @@ export async function seedDemo(opts: { reset?: boolean } = {}): Promise<string> 
   const rand = mulberry32(42);
   const now = Date.now();
   const startsAt = new Date(now - 50 * 60_000); // doors opened ~80 min ago, event started 50 min ago
-  const coverKey = `covers/${DEMO_SLUG}.svg`;
+  const coverKey = `covers/${DEMO_SLUG}-v2.svg`;
   await putObject(coverKey, coverSvg(), 'image/svg+xml');
 
   const { eventId, ticketIds } = await withTx(async (tx) => {

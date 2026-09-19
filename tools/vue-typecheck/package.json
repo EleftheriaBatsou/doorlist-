@@ -1,0 +1,12 @@
+{
+  "name": "vue-typecheck",
+  "private": true,
+  "description": "vue-tsc needs the TypeScript JS API, which TS 7 (native compiler) no longer ships. Pinned to the last stable TS with that API; used only to type-check .vue files.",
+  "scripts": {
+    "check": "vue-tsc -p ../../tsconfig.web.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vue-tsc": "3.3.11"
+  }
+}

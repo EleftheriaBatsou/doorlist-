@@ -6,7 +6,7 @@ import { processScan, type ScanInput } from '../checkin.js';
 import { issueTicket, RsvpError } from '../rsvp.js';
 import { enqueue } from '../queue.js';
 import { getStats, invalidateStats, publishLive } from '../redis.js';
-import { putObject } from '../storage.js';
+import { getObject, putObject } from '../storage.js';
 import { coverUrl } from './public.js';
 import { DEMO_SLUG, seedDemo } from '../seed.js';
 
@@ -263,6 +263,16 @@ export function adminRoutes(app: FastifyInstance) {
       const stats = await getStats(rows[0].event_id);
       await publishLive(rows[0].event_id, { type: 'ticket', ticketId: rows[0].id, stats });
       return adminTicket(rows[0]);
+    });
+
+    // Rendered ticket email (stored by the worker when SMTP isn't configured).
+    r.get<{ Params: { ticketId: string } }>('/api/tickets/:ticketId/email-preview', async (req, reply) => {
+      if (!UUID_RE.test(req.params.ticketId)) return reply.code(404).send({ error: 'Not found' });
+      const obj = await getObject(`emails/${req.params.ticketId}.html`);
+      if (!obj) return reply.code(404).send({ error: 'No preview for this ticket' });
+      reply.header('content-type', 'text/html; charset=utf-8');
+      reply.header('content-security-policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'");
+      return reply.send(obj.body);
     });
 
     r.post('/api/demo/reset', async () => {
