@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     // Served through the Zerops L7 balancer (and later a custom domain).
-    allowedHosts: ['.zerops.app', ...(process.env.PUBLIC_HOST ? [process.env.PUBLIC_HOST] : [])],
+    allowedHosts: ['.zerops.app', 'appdev', 'localhost', ...(process.env.PUBLIC_HOST ? [process.env.PUBLIC_HOST] : [])],
   },
   build: {
     outDir: '../dist/web',

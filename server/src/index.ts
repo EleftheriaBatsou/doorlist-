@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { LogController } from 'fastify';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
@@ -18,7 +18,10 @@ const app = Fastify({
   trustProxy: true, // behind the Zerops L7 balancer — real client IP for rate limits
   bodyLimit: 1024 * 1024,
   forceCloseConnections: true, // fast restarts: don't wait on idle keep-alive / HMR sockets
-  disableRequestLogging: !config.isProd, // dev: Vite module requests would drown the log
+  logController: new LogController({
+    // Dev: Vite serves every module through this server — log API traffic only.
+    disableRequestLogging: (req) => !config.isProd && !req.url.startsWith('/api/'),
+  }),
 });
 
 await app.register(cookie, { secret: config.sessionSecret });
