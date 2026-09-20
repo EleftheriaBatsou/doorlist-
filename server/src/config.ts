@@ -36,6 +36,5 @@ export const config = {
   // Project-level secrets, shared with the worker.
   ticketSecret: required('TICKET_SECRET'),
   sessionSecret: required('SESSION_SECRET'),
-  adminPassword: required('ADMIN_PASSWORD'),
   hmrClientPort: process.env.HMR_CLIENT_PORT ? Number(process.env.HMR_CLIENT_PORT) : undefined,
 };

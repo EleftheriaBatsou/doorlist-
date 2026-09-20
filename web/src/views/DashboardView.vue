@@ -142,7 +142,7 @@ async function addAttendee() {
 
 async function resetDemo() {
   if (!confirm('Reset the demo event? All its tickets and check-ins are recreated with a fresh arrival curve.')) return;
-  const r = await api.post<{ id: string }>('/api/demo/reset');
+  const r = await api.post<{ id: string }>(`/api/events/${id.value}/demo-reset`);
   router.replace(`/admin/events/${r.id}`);
   setTimeout(loadAll, 50);
 }

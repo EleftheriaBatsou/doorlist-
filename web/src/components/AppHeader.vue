@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
-import { setAuthed } from '../lib/auth';
+import { currentUser, setUser } from '../lib/auth';
 
 defineProps<{ admin?: boolean }>();
 const router = useRouter();
 
 async function logout() {
   await api.post('/api/auth/logout');
-  setAuthed(false);
+  setUser(null);
   router.push('/');
 }
 </script>
@@ -26,9 +26,16 @@ async function logout() {
         <slot />
         <template v-if="admin">
           <RouterLink to="/admin" class="navlink">Events</RouterLink>
+          <span v-if="currentUser" class="who" :title="currentUser.email">{{ currentUser.name }}</span>
           <button class="navlink" @click="logout">Sign out</button>
         </template>
-        <RouterLink v-else to="/admin" class="navlink">Organiser</RouterLink>
+        <template v-else-if="currentUser">
+          <RouterLink to="/admin" class="navlink">My events</RouterLink>
+        </template>
+        <template v-else>
+          <RouterLink to="/login" class="navlink">Sign in</RouterLink>
+          <RouterLink to="/register" class="navlink primary">Create account</RouterLink>
+        </template>
       </nav>
     </div>
   </header>
@@ -84,6 +91,26 @@ async function logout() {
   border-radius: 999px;
   cursor: pointer;
   text-decoration: none !important;
+}
+.navlink.primary {
+  background: var(--accent);
+  color: #fff;
+}
+.navlink.primary:hover {
+  background: var(--accent-ink);
+  color: #fff;
+}
+.who {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  padding: 6px 12px;
+  border-radius: 999px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .navlink:hover,
 .navlink.router-link-exact-active {

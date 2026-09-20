@@ -22,6 +22,16 @@ export async function withTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 
 const SCHEMA = /* sql */ `
+CREATE TABLE IF NOT EXISTS users (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         text NOT NULL,
+  name          text NOT NULL,
+  password_hash text NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  last_login_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower ON users (lower(email));
+
 CREATE TABLE IF NOT EXISTS events (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug            text NOT NULL UNIQUE,
@@ -34,6 +44,11 @@ CREATE TABLE IF NOT EXISTS events (
   published       boolean NOT NULL DEFAULT false,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
+
+-- Each event belongs to the organiser who created it. NULL means "not claimed yet":
+-- the first account to register adopts those (the demo seeded before accounts existed).
+ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id uuid REFERENCES users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS events_owner ON events (owner_id);
 
 CREATE TABLE IF NOT EXISTS tickets (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),

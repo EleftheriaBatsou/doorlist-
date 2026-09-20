@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { isValidSession, SESSION_COOKIE } from './auth.js';
+import { SESSION_COOKIE, userFromCookie } from './auth.js';
 import { subscriber } from './redis.js';
+import { pool } from './db.js';
 
 /**
  * Real-time fan-out: every API instance PSUBSCRIBEs to `ev:*:live` on the cache and relays
@@ -15,25 +16,34 @@ export async function setupLive(app: FastifyInstance) {
   app.server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://x');
     if (url.pathname !== '/ws') return; // leave other upgrades (Vite HMR in dev) alone
-    const cookies = app.parseCookie(req.headers.cookie ?? '');
     const eventId = url.searchParams.get('event') ?? '';
-    if (!isValidSession(app, cookies[SESSION_COOKIE]) || !/^[0-9a-f-]{36}$/i.test(eventId)) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      let room = rooms.get(eventId);
-      if (!room) rooms.set(eventId, (room = new Set()));
-      room.add(ws);
-      (ws as any).isAlive = true;
-      ws.on('pong', () => ((ws as any).isAlive = true));
-      ws.on('close', () => {
-        room!.delete(ws);
-        if (room!.size === 0) rooms.delete(eventId);
+    void (async () => {
+      const cookies = app.parseCookie(req.headers.cookie ?? '');
+      const user = /^[0-9a-f-]{36}$/i.test(eventId)
+        ? await userFromCookie(app, cookies[SESSION_COOKIE])
+        : null;
+      // Only the event's own organiser may watch its live feed.
+      const owns =
+        user &&
+        (await pool.query(`SELECT 1 FROM events WHERE id = $1 AND owner_id = $2`, [eventId, user.id])).rowCount;
+      if (!owns) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        let room = rooms.get(eventId);
+        if (!room) rooms.set(eventId, (room = new Set()));
+        room.add(ws);
+        (ws as any).isAlive = true;
+        ws.on('pong', () => ((ws as any).isAlive = true));
+        ws.on('close', () => {
+          room!.delete(ws);
+          if (room!.size === 0) rooms.delete(eventId);
+        });
+        ws.send(JSON.stringify({ type: 'hello' }));
       });
-      ws.send(JSON.stringify({ type: 'hello' }));
-    });
+    })();
   });
 
   // Keep connections alive through the L7 balancer and drop dead clients.

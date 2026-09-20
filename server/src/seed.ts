@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { pool, withTx } from './db.js';
 import { newTicketCode } from './ticket-code.js';
 import { enqueue } from './queue.js';
@@ -75,26 +76,33 @@ function coverSvg(): string {
 </svg>`;
 }
 
-export async function demoExists(): Promise<boolean> {
-  const { rowCount } = await pool.query('SELECT 1 FROM events WHERE slug = $1', [DEMO_SLUG]);
+export const isDemoSlug = (slug: string) => slug === DEMO_SLUG || slug.startsWith(`${DEMO_SLUG}-`);
+
+export async function anyEventExists(): Promise<boolean> {
+  const { rowCount } = await pool.query('SELECT 1 FROM events LIMIT 1');
   return (rowCount ?? 0) > 0;
 }
 
-/** Creates (or recreates) the demo event with ~40 attendees, about half already arrived. */
-export async function seedDemo(opts: { reset?: boolean } = {}): Promise<string> {
+/**
+ * Creates a demo event with ~40 attendees, about half already arrived — so a new
+ * organiser's dashboard has a real arrival curve on first login.
+ * `replaceEventId` recreates an existing demo in place (the "Reset demo data" button).
+ */
+export async function seedDemo(opts: { ownerId?: string | null; replaceEventId?: string } = {}): Promise<string> {
   const rand = mulberry32(42);
   const now = Date.now();
   const startsAt = new Date(now - 50 * 60_000); // doors opened ~80 min ago, event started 50 min ago
+  const slug = opts.ownerId ? `${DEMO_SLUG}-${randomBytes(3).toString('hex')}` : DEMO_SLUG;
   const coverKey = `covers/${DEMO_SLUG}-v2.svg`;
   await putObject(coverKey, coverSvg(), 'image/svg+xml');
 
   const { eventId, ticketIds } = await withTx(async (tx) => {
-    if (opts.reset) await tx.query('DELETE FROM events WHERE slug = $1', [DEMO_SLUG]);
+    if (opts.replaceEventId) await tx.query('DELETE FROM events WHERE id = $1', [opts.replaceEventId]);
     const ev = await tx.query(
-      `INSERT INTO events (slug, title, description, starts_at, venue, capacity, cover_image_key, published)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true) RETURNING id`,
+      `INSERT INTO events (slug, title, description, starts_at, venue, capacity, cover_image_key, published, owner_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8) RETURNING id`,
       [
-        DEMO_SLUG,
+        slug,
         'Neon Nights — Autumn Launch Party',
         'An evening of synth-pop, glow paint and very good snacks to celebrate the autumn launch.\n\n' +
           'Doors open 30 minutes before the start. Bring your ticket QR on your phone — we scan at the door, ' +
@@ -103,6 +111,7 @@ export async function seedDemo(opts: { reset?: boolean } = {}): Promise<string> 
         'Kasárna Karlín, Prague',
         120,
         coverKey,
+        opts.ownerId ?? null,
       ],
     );
     const eventId: string = ev.rows[0].id;

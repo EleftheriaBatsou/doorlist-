@@ -7,11 +7,11 @@ import { config } from './config.js';
 import { migrate, pool } from './db.js';
 import { redis, subscriber } from './redis.js';
 import { closeQueue, connectQueue } from './queue.js';
-import { authRoutes } from './auth.js';
+import { authRoutes, type User } from './auth.js';
 import { publicRoutes } from './routes/public.js';
 import { adminRoutes } from './routes/admin.js';
 import { setupLive } from './live.js';
-import { demoExists, seedDemo } from './seed.js';
+import { anyEventExists, seedDemo } from './seed.js';
 
 const app = Fastify({
   logger: { level: 'info' },
@@ -48,7 +48,20 @@ app.get('/api/health', async (_req, reply) => {
   }
 });
 
-authRoutes(app);
+/**
+ * First account to register adopts any events that predate accounts (the seeded demo);
+ * every later account gets its own demo event, so no dashboard starts empty.
+ */
+async function onRegister(user: User) {
+  const adopted = await pool.query(`UPDATE events SET owner_id = $1 WHERE owner_id IS NULL`, [user.id]);
+  if (adopted.rowCount) {
+    app.log.info({ userId: user.id, events: adopted.rowCount }, 'first account adopted existing events');
+    return;
+  }
+  await seedDemo({ ownerId: user.id });
+}
+
+authRoutes(app, onRegister);
 publicRoutes(app);
 adminRoutes(app);
 
@@ -89,7 +102,7 @@ await setupLive(app);
 
 await migrate();
 await connectQueue(app.log);
-if (!(await demoExists())) {
+if (!(await anyEventExists())) {
   app.log.info('seeding demo event');
   // Another container may seed concurrently; the slug's unique index makes that a no-op.
   await seedDemo().catch((err) => app.log.warn({ err }, 'demo seed skipped'));

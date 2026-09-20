@@ -1,14 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { pool } from '../db.js';
-import { requireAdmin } from '../auth.js';
+import { requireAuth } from '../auth.js';
 import { processScan, type ScanInput } from '../checkin.js';
 import { issueTicket, RsvpError } from '../rsvp.js';
 import { enqueue } from '../queue.js';
 import { getStats, invalidateStats, publishLive } from '../redis.js';
 import { getObject, putObject } from '../storage.js';
 import { coverUrl } from './public.js';
-import { DEMO_SLUG, seedDemo } from '../seed.js';
+import { isDemoSlug, seedDemo } from '../seed.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -24,7 +24,7 @@ function adminEvent(r: any) {
     coverUrl: coverUrl(r.cover_image_key),
     published: r.published,
     createdAt: r.created_at,
-    isDemo: r.slug === DEMO_SLUG,
+    isDemo: isDemoSlug(r.slug),
   };
 }
 
@@ -69,14 +69,29 @@ function validateEvent(b: EventBody, partial: boolean): string | null {
 
 export function adminRoutes(app: FastifyInstance) {
   app.register(async (r) => {
-    r.addHook('preHandler', requireAdmin);
+    r.addHook('preHandler', requireAuth);
+    // Ownership gate: an event or ticket belonging to another organiser is a 404 here,
+    // so no route below has to remember to filter by owner.
     r.addHook('preHandler', async (req, reply) => {
-      const id = (req.params as any)?.id;
-      if (id !== undefined && !UUID_RE.test(id)) return reply.code(404).send({ error: 'Not found' });
+      const p = (req.params ?? {}) as { id?: string; ticketId?: string };
+      const notFound = () => reply.code(404).send({ error: 'Not found' });
+      if (p.id !== undefined) {
+        if (!UUID_RE.test(p.id)) return notFound();
+        const { rowCount } = await pool.query(`SELECT 1 FROM events WHERE id = $1 AND owner_id = $2`, [p.id, req.user!.id]);
+        if (!rowCount) return notFound();
+      }
+      if (p.ticketId !== undefined) {
+        if (!UUID_RE.test(p.ticketId)) return notFound();
+        const { rowCount } = await pool.query(
+          `SELECT 1 FROM tickets t JOIN events e ON e.id = t.event_id WHERE t.id = $1 AND e.owner_id = $2`,
+          [p.ticketId, req.user!.id],
+        );
+        if (!rowCount) return notFound();
+      }
     });
 
-    r.get('/api/events', async () => {
-      const { rows } = await pool.query(`SELECT * FROM events ORDER BY starts_at DESC`);
+    r.get('/api/events', async (req) => {
+      const { rows } = await pool.query(`SELECT * FROM events WHERE owner_id = $1 ORDER BY starts_at DESC`, [req.user!.id]);
       return Promise.all(rows.map(async (e) => ({ ...adminEvent(e), stats: await getStats(e.id) })));
     });
 
@@ -87,9 +102,9 @@ export function adminRoutes(app: FastifyInstance) {
       const slug = b.slug || `${slugify(b.title!)}-${randomBytes(2).toString('hex')}`;
       try {
         const { rows } = await pool.query(
-          `INSERT INTO events (slug, title, description, starts_at, venue, capacity, published)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-          [slug, b.title!.trim(), b.description ?? '', b.startsAt, b.venue ?? '', b.capacity, b.published ?? false],
+          `INSERT INTO events (slug, title, description, starts_at, venue, capacity, published, owner_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          [slug, b.title!.trim(), b.description ?? '', b.startsAt, b.venue ?? '', b.capacity, b.published ?? false, req.user!.id],
         );
         return reply.code(201).send(adminEvent(rows[0]));
       } catch (e: any) {
@@ -233,14 +248,12 @@ export function adminRoutes(app: FastifyInstance) {
 
     r.post<{ Params: { id: string; ticketId: string }; Body: Omit<ScanInput, 'eventId' | 'ticketId' | 'payload'> }>(
       '/api/events/:id/tickets/:ticketId/check-in',
-      async (req, reply) => {
-        if (!UUID_RE.test(req.params.ticketId)) return reply.code(404).send({ error: 'Not found' });
+      async (req) => {
         return processScan({ ...pickScan(req.body ?? {}), eventId: req.params.id, ticketId: req.params.ticketId });
       },
     );
 
     r.post<{ Params: { ticketId: string } }>('/api/tickets/:ticketId/resend', async (req, reply) => {
-      if (!UUID_RE.test(req.params.ticketId)) return reply.code(404).send({ error: 'Not found' });
       const { rows } = await pool.query(
         `UPDATE tickets SET email_status = 'pending', email_error = NULL
           WHERE id = $1 AND status <> 'cancelled' RETURNING *`,
@@ -253,7 +266,6 @@ export function adminRoutes(app: FastifyInstance) {
     });
 
     r.post<{ Params: { ticketId: string } }>('/api/tickets/:ticketId/cancel', async (req, reply) => {
-      if (!UUID_RE.test(req.params.ticketId)) return reply.code(404).send({ error: 'Not found' });
       const { rows } = await pool.query(
         `UPDATE tickets SET status = 'cancelled' WHERE id = $1 AND status <> 'cancelled' RETURNING *`,
         [req.params.ticketId],
@@ -267,7 +279,6 @@ export function adminRoutes(app: FastifyInstance) {
 
     // Rendered ticket email (stored by the worker when SMTP isn't configured).
     r.get<{ Params: { ticketId: string } }>('/api/tickets/:ticketId/email-preview', async (req, reply) => {
-      if (!UUID_RE.test(req.params.ticketId)) return reply.code(404).send({ error: 'Not found' });
       const obj = await getObject(`emails/${req.params.ticketId}.html`);
       if (!obj) return reply.code(404).send({ error: 'No preview for this ticket' });
       reply.header('content-type', 'text/html; charset=utf-8');
@@ -275,9 +286,10 @@ export function adminRoutes(app: FastifyInstance) {
       return reply.send(obj.body);
     });
 
-    r.post('/api/demo/reset', async () => {
-      const id = await seedDemo({ reset: true });
-      return { id };
+    r.post<{ Params: { id: string } }>('/api/events/:id/demo-reset', async (req, reply) => {
+      const { rows } = await pool.query(`SELECT slug FROM events WHERE id = $1`, [req.params.id]);
+      if (!isDemoSlug(rows[0]?.slug ?? '')) return reply.code(400).send({ error: 'Only the demo event can be reset' });
+      return { id: await seedDemo({ ownerId: req.user!.id, replaceEventId: req.params.id }) };
     });
   });
 }
