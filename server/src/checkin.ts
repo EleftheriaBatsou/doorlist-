@@ -157,6 +157,12 @@ export async function processScan(input: ScanInput): Promise<ScanOutcome> {
       result: outcome.result,
       reason: outcome.reason,
       ticket: outcome.ticket,
+      // Initials for the avatar bubble in the live scan feed.
+      initials: outcome.ticket!.name
+        .split(' ')
+        .map((part) => part[0].toUpperCase())
+        .join('')
+        .slice(0, 2),
       device: input.deviceLabel ?? null,
       at: outcome.ticket?.checkedInAt && outcome.result === 'success' ? outcome.ticket.checkedInAt : new Date().toISOString(),
       stats: outcome.stats,
