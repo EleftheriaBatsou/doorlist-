@@ -1,3 +1,4 @@
+import './instrument.js';
 import Fastify, { LogController } from 'fastify';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
@@ -12,6 +13,7 @@ import { publicRoutes } from './routes/public.js';
 import { adminRoutes } from './routes/admin.js';
 import { setupLive } from './live.js';
 import { anyEventExists, seedDemo } from './seed.js';
+import * as Sentry from '@sentry/node';
 
 const app = Fastify({
   logger: { level: 'info' },
@@ -23,6 +25,9 @@ const app = Fastify({
     disableRequestLogging: (req) => !config.isProd && !req.url.startsWith('/api/'),
   }),
 });
+
+// Send every unhandled route error to Sentry.
+Sentry.setupFastifyErrorHandler(app);
 
 await app.register(cookie, { secret: config.sessionSecret });
 await app.register(multipart);
