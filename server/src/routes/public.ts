@@ -7,6 +7,8 @@ import { buildIcs } from '../ics.js';
 import { config } from '../config.js';
 
 export const coverUrl = (key: string | null) => (key ? `/media/${key}` : null);
+// Events without a cover image have a null key, so there is no thumbnail either.
+export const coverThumbUrl = (key: string | null) => (key ? `/media/${key.replace(/\.(\w+)$/, '-thumb.$1')}` : null);
 
 function publicEvent(r: any, remaining?: number) {
   return {
@@ -92,7 +94,7 @@ export function publicRoutes(app: FastifyInstance) {
         venue: r.venue,
         coverUrl: coverUrl(r.cover_image_key),
         // Smaller variant for the ticket header on phones.
-        coverThumbUrl: `/media/${r.cover_image_key.replace(/\.(\w+)$/, '-thumb.$1')}`,
+        coverThumbUrl: coverThumbUrl(r.cover_image_key),
       },
     };
   });
