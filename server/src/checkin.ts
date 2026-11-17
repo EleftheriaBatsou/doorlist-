@@ -136,6 +136,12 @@ async function checkIn(tx: Tx, input: ScanInput): Promise<ScanOutcome> {
   return { result: 'already_used', ticket: shapeTicket(t) };
 }
 
+/** Avatar initials for the live scan feed; matches the web app's `initials()` helper. */
+function initials(name: string | undefined): string | null {
+  const parts = (name ?? '').split(/\s+/).filter(Boolean).slice(0, 2);
+  return parts.length ? parts.map((p) => p[0]!.toUpperCase()).join('') : null;
+}
+
 export async function processScan(input: ScanInput): Promise<ScanOutcome> {
   let outcome: ScanOutcome;
   try {
@@ -158,11 +164,8 @@ export async function processScan(input: ScanInput): Promise<ScanOutcome> {
       reason: outcome.reason,
       ticket: outcome.ticket,
       // Initials for the avatar bubble in the live scan feed.
-      initials: outcome.ticket!.name
-        .split(' ')
-        .map((part) => part[0].toUpperCase())
-        .join('')
-        .slice(0, 2),
+      // Null for scans with no ticket (bad signature, unknown ticket id).
+      initials: initials(outcome.ticket?.name),
       device: input.deviceLabel ?? null,
       at: outcome.ticket?.checkedInAt && outcome.result === 'success' ? outcome.ticket.checkedInAt : new Date().toISOString(),
       stats: outcome.stats,
