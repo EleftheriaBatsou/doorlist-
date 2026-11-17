@@ -85,7 +85,15 @@ export function publicRoutes(app: FastifyInstance) {
       qrReady: !!r.qr_object_key,
       emailStatus: r.email_status,
       issuedAt: r.issued_at,
-      event: { slug: r.slug, title: r.title, startsAt: r.starts_at, venue: r.venue, coverUrl: coverUrl(r.cover_image_key) },
+      event: {
+        slug: r.slug,
+        title: r.title,
+        startsAt: r.starts_at,
+        venue: r.venue,
+        coverUrl: coverUrl(r.cover_image_key),
+        // Smaller variant for the ticket header on phones.
+        coverThumbUrl: `/media/${r.cover_image_key.replace(/\.(\w+)$/, '-thumb.$1')}`,
+      },
     };
   });
 
